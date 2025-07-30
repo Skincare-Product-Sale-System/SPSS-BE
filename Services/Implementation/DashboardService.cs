@@ -231,6 +231,21 @@ namespace Services.Implementation
 
             var totalOrderCount = completedOrderCount + pendingOrdersCount;
 
+            // Get total users count (active users)
+            var totalUsers = await _unitOfWork.Users.Entities
+                .Where(u => u.Status == StatusForAccount.Active)
+                .CountAsync();
+
+            // Get total orders in the system (including cancelled)
+            var totalOrders = await _unitOfWork.Orders.Entities
+                .Where(o => !o.IsDeleted)
+                .CountAsync();
+
+            // Get total delivered orders
+            var totalDeliveredOrders = await _unitOfWork.Orders.Entities
+                .Where(o => !o.IsDeleted && o.Status == StatusForOrder.Delivered)
+                .CountAsync();
+
             return new FinancialSummaryDto
             {
                 GrossRevenue = grossRevenue,
@@ -249,7 +264,11 @@ namespace Services.Implementation
                 PendingOrderRate = totalOrderCount > 0 ? (double)pendingOrdersCount / totalOrderCount * 100 : 0,
                 DiscountRate = grossRevenue > 0 ? (double)(totalDiscountAmount / grossRevenue) * 100 : 0,
                 StartDate = startDate,
-                EndDate = endDate
+                EndDate = endDate,
+                // New attributes
+                TotalUsers = totalUsers,
+                TotalOrders = totalOrders,
+                TotalDeliveredOrders = totalDeliveredOrders
             };
         }
 

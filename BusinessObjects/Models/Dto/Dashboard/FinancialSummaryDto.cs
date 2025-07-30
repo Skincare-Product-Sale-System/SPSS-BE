@@ -22,5 +22,10 @@ namespace BusinessObjects.Models.Dto.Dashboard
         public double DiscountRate { get; set; }
         public DateTime? StartDate { get; set; }
         public DateTime? EndDate { get; set; }
+        
+        // New attributes requested
+        public int TotalUsers { get; set; }             // Total number of users on the website
+        public int TotalOrders { get; set; }            // Total number of orders in the system
+        public int TotalDeliveredOrders { get; set; }   // Total number of delivered orders
     }
 }
