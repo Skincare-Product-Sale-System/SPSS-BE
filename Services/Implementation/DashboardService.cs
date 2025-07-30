@@ -282,67 +282,106 @@ namespace Services.Implementation
 
         public async Task<PagedResponse<ProductProfitDto>> GetProductProfitAnalysisAsync(int pageNumber, int pageSize, DateTime? startDate = null, DateTime? endDate = null)
         {
-            // Create a query for order details of completed orders
-            var query = _unitOfWork.OrderDetails.Entities
-                .Include(od => od.Order)
-                    .ThenInclude(o => o.Voucher)
-                .Include(od => od.ProductItem)
-                .ThenInclude(pi => pi.Product)
-                .Where(od => !od.Order.IsDeleted && 
-                             od.Order.Status == StatusForOrder.Delivered);
-                
-            if (startDate.HasValue)
-                query = query.Where(od => od.Order.CreatedTime >= startDate.Value);
-            if (endDate.HasValue)
-                query = query.Where(od => od.Order.CreatedTime <= endDate.Value);
-                
-            // Group by product and calculate profit metrics
-            var productProfits = await query
-                .GroupBy(od => new { od.ProductItem.ProductId, od.ProductItem.Product.Name })
-                .Select(g => new
-                {
-                    ProductId = g.Key.ProductId,
-                    ProductName = g.Key.Name,
-                    QuantitySold = g.Sum(od => od.Quantity),
-                    LineItemRevenue = g.Sum(od => od.Price * od.Quantity),
-                    PurchasePrice = g.Average(od => od.ProductItem.PurchasePrice)
-                })
-                .OrderByDescending(p => p.LineItemRevenue)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-                
-            // Calculate profit and profit margin for each product
-            var productProfitDtos = productProfits.Select(p => 
+            try
             {
-                var procurementCost = p.PurchasePrice * p.QuantitySold;
-                var profit = p.LineItemRevenue - procurementCost;
-                var profitMargin = p.LineItemRevenue > 0 ? (profit / p.LineItemRevenue) * 100 : 0;
+                // Create a query for order details of completed orders
+                var query = _unitOfWork.OrderDetails.Entities
+                    .Include(od => od.Order)
+                        .ThenInclude(o => o.Voucher)
+                    .Include(od => od.ProductItem)
+                        .ThenInclude(pi => pi.Product)
+                            .ThenInclude(p => p.ProductImages)
+                    .Where(od => !od.Order.IsDeleted && 
+                                 od.Order.Status == StatusForOrder.Delivered);
+                    
+                if (startDate.HasValue)
+                    query = query.Where(od => od.Order.CreatedTime >= startDate.Value);
+                if (endDate.HasValue)
+                    query = query.Where(od => od.Order.CreatedTime <= endDate.Value);
+                    
+                // First, get all order details with order information to properly calculate discounts
+                var orderDetails = await query.ToListAsync();
                 
-                return new ProductProfitDto
-                {
-                    ProductId = p.ProductId,
-                    ProductName = p.ProductName,
-                    QuantitySold = p.QuantitySold,
-                    Revenue = p.LineItemRevenue,
-                    ProcurementCost = procurementCost,
-                    Profit = profit,
-                    ProfitMargin = profitMargin
-                };
-            }).ToList();
+                // Group by order to calculate discount ratio per order
+                var orderDiscountRatios = orderDetails
+                    .GroupBy(od => od.OrderId)
+                    .ToDictionary(
+                        g => g.Key, 
+                        g => {
+                            var order = g.First().Order;
+                            var grossTotal = g.Sum(od => od.Price * od.Quantity);
+                            // Avoid division by zero
+                            if (grossTotal <= 0) return 1.0m;
+                            
+                            // Calculate discount ratio (how much of the original price remains after discount)
+                            return order.OrderTotal / grossTotal;
+                        }
+                    );
+                
+                // Group by product with accurate revenue calculation
+                var productGroups = orderDetails
+                    .GroupBy(od => new { 
+                        od.ProductItem.ProductId, 
+                        od.ProductItem.Product.Name,
+                        ThumbnailUrl = od.ProductItem.Product.ProductImages.FirstOrDefault(img => img.IsThumbnail)?.ImageUrl ?? ""
+                    })
+                    .Select(g => {
+                        // Calculate gross revenue (before discount)
+                        decimal grossRevenue = g.Sum(od => od.Price * od.Quantity);
+                        
+                        // Calculate net revenue (after applying discount proportionally)
+                        decimal netRevenue = g.Sum(od => {
+                            var discountRatio = orderDiscountRatios[od.OrderId];
+                            return (od.Price * od.Quantity) * discountRatio;
+                        });
+                        
+                        // Calculate procurement cost
+                        int quantitySold = g.Sum(od => od.Quantity);
+                        decimal purchasePrice = g.Average(od => od.ProductItem.PurchasePrice);
+                        decimal procurementCost = purchasePrice * quantitySold;
+                        
+                        // Calculate profit and profit margin
+                        decimal profit = netRevenue - procurementCost;
+                        decimal profitMargin = netRevenue > 0 ? (profit / netRevenue) * 100 : 0;
+                        
+                        return new ProductProfitDto
+                        {
+                            ProductId = g.Key.ProductId,
+                            ProductName = g.Key.Name,
+                            ImageUrl = g.Key.ThumbnailUrl,
+                            QuantitySold = quantitySold,
+                            GrossRevenue = grossRevenue,
+                            DiscountAmount = grossRevenue - netRevenue,
+                            Revenue = netRevenue,
+                            ProcurementCost = procurementCost,
+                            Profit = profit,
+                            ProfitMargin = profitMargin
+                        };
+                    })
+                    .OrderByDescending(p => p.Revenue)
+                    .ToList();
             
-            // Get total count for pagination
-            var totalCount = await query
-                .GroupBy(od => od.ProductItem.ProductId)
-                .CountAsync();
-                
-            return new PagedResponse<ProductProfitDto>
+                // Apply pagination
+                var totalCount = productGroups.Count;
+                var paginatedResults = productGroups
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+                    
+                return new PagedResponse<ProductProfitDto>
+                {
+                    Items = paginatedResults,
+                    TotalCount = totalCount,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
+            }
+            catch (Exception ex)
             {
-                Items = productProfitDtos,
-                TotalCount = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize
-            };
+                // Log the error
+                Console.WriteLine($"Error in GetProductProfitAnalysisAsync: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task<List<MonthlyFinancialReportDto>> GetMonthlyFinancialReportAsync(int year)
