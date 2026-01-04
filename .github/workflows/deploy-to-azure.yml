@@ -35,13 +35,16 @@ jobs:
       run: dotnet build --configuration ${{ env.CONFIGURATION }} --no-restore
     
     - name: Publish
-      run: dotnet publish "${{ env.WORKING_DIRECTORY }}" --configuration ${{ env.CONFIGURATION }} --no-build --output "${{ env.AZURE_WEBAPP_PACKAGE_PATH }}" /p:DebugType=None /p:DebugSymbols=false
+      run: dotnet publish "${{ env.WORKING_DIRECTORY }}" --configuration ${{ env.CONFIGURATION }} --no-build --output "${{ env.AZURE_WEBAPP_PACKAGE_PATH }}" -r win-x64 --self-contained false /p:DebugType=None /p:DebugSymbols=false
     
     - name: Remove unnecessary files
       run: |
         cd ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue *.pdb
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue *.xml
+        if (Test-Path runtimes) {
+          Get-ChildItem runtimes -Directory | Where-Object { $_.Name -notmatch "win" } | Remove-Item -Recurse -Force
+        }
       shell: pwsh
     
     - name: Upload artifact
