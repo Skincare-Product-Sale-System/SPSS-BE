@@ -30,10 +30,6 @@ builder.Host.UseSerilog((context, services, configuration) =>
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "SPSS API", Version = "v1" });
-});
 builder.Services.ConfigureCors();
 builder.Services.ConfigureRepositories();
 builder.Services.ConfigureServices();
