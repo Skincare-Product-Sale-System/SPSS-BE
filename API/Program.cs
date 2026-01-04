@@ -30,6 +30,10 @@ builder.Host.UseSerilog((context, services, configuration) =>
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "SPSS API", Version = "v1" });
+});
 builder.Services.ConfigureCors();
 builder.Services.ConfigureRepositories();
 builder.Services.ConfigureServices();
@@ -56,16 +60,13 @@ var app = builder.Build();
 //    Console.WriteLine("Migrations applied successfully!");
 //}
 
-// SECURITY FIX: Only enable Swagger in Development environment
-if (app.Environment.IsDevelopment())
+// Enable Swagger in all environments for API testing
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "API V1");
-        c.RoutePrefix = string.Empty; // Đặt root URL để Swagger mở tại trang chính
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SPSS API V1");
+    c.RoutePrefix = "swagger"; // Access Swagger at /swagger
+});
 
 app.UseSerilogRequestLogging();
 
