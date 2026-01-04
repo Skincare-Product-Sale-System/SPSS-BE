@@ -45,16 +45,16 @@ builder.Services.AddSignalR().AddAzureSignalR(builder.Configuration["Azure:Signa
 
 var app = builder.Build();
 
-// Apply migrations at startup
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<SPSSContext>();
-    
-    // Apply pending migrations
-    Console.WriteLine("Applying pending migrations...");
-    dbContext.Database.Migrate();
-    Console.WriteLine("Migrations applied successfully!");
-}
+// Apply migrations at startup - TEMPORARILY DISABLED for debugging
+//using (var scope = app.Services.CreateScope())
+//{
+//    var dbContext = scope.ServiceProvider.GetRequiredService<SPSSContext>();
+//    
+//    // Apply pending migrations
+//    Console.WriteLine("Applying pending migrations...");
+//    dbContext.Database.Migrate();
+//    Console.WriteLine("Migrations applied successfully!");
+//}
 
 // SECURITY FIX: Only enable Swagger in Development environment
 if (app.Environment.IsDevelopment())
