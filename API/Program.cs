@@ -18,7 +18,7 @@ builder.Host.UseSerilog((context, services, configuration) =>
         .Enrich.FromLogContext()
         .WriteTo.Console()
         .WriteTo.File(
-            path: "logs/log-.txt",
+            path: Path.Combine("D:\\home\\LogFiles\\Application", "log-.txt"),
             rollingInterval: RollingInterval.Day,
             rollOnFileSizeLimit: true,
             fileSizeLimitBytes: 10485760,
@@ -46,15 +46,15 @@ builder.Services.AddSignalR().AddAzureSignalR(builder.Configuration["Azure:Signa
 var app = builder.Build();
 
 // Apply migrations at startup
-//using (var scope = app.Services.CreateScope())
-//{
-//    var dbContext = scope.ServiceProvider.GetRequiredService<SPSSContext>();
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<SPSSContext>();
     
-//    // Apply pending migrations
-//    Console.WriteLine("Applying pending migrations...");
-//    dbContext.Database.Migrate();
-//    Console.WriteLine("Migrations applied successfully!");
-//}
+    // Apply pending migrations
+    Console.WriteLine("Applying pending migrations...");
+    dbContext.Database.Migrate();
+    Console.WriteLine("Migrations applied successfully!");
+}
 
 // Enable Swagger in all environments (for API testing)
 app.UseSwagger();
