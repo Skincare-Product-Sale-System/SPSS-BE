@@ -56,16 +56,13 @@ var app = builder.Build();
 //    Console.WriteLine("Migrations applied successfully!");
 //}
 
-// SECURITY FIX: Only enable Swagger in Development environment
-if (app.Environment.IsDevelopment())
+// Enable Swagger in all environments (for API testing)
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "API V1");
-        c.RoutePrefix = string.Empty; // Đặt root URL để Swagger mở tại trang chính
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "API V1");
+    c.RoutePrefix = "swagger"; // Swagger tại /swagger
+});
 
 app.UseSerilogRequestLogging();
 
