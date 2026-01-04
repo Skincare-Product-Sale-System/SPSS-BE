@@ -72,15 +72,17 @@ dotnet run
   - `**/handmade-product-*.json`
   - Các file credentials khác
 
-## 📦 Deploy to Azure
+## 📦 Deploy to Azure với GitHub Actions
 
-Xem hướng dẫn chi tiết trong [DEPLOYMENT.md](DEPLOYMENT.md)
+Xem hướng dẫn chi tiết trong [.github/DEPLOYMENT_GUIDE.md](.github/DEPLOYMENT_GUIDE.md)
 
-Tóm tắt:
-1. Tạo Azure SQL Database
-2. Tạo Azure App Service
-3. Cấu hình Environment Variables trên Azure Portal
-4. Deploy qua GitHub Actions hoặc Azure DevOps
+### Quick Start:
+1. Tạo Azure SQL Database và App Service (qua Azure Portal)
+2. Download Publish Profile từ App Service
+3. Add secret `AZURE_WEBAPP_PUBLISH_PROFILE` vào GitHub
+4. Push code → Tự động deploy!
+
+Chi tiết đầy đủ xem file deployment guide.
 
 ## 🛠️ Database Migration
 

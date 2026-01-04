@@ -198,10 +198,8 @@ public static class ServiceExtensions
                     // Add your production domains here
                     policy.WithOrigins(
                             "http://localhost:3000",
-                            "https://localhost:3000"
-                            // Add production URLs here, e.g.:
-                            // "https://yourdomain.com",
-                            // "https://www.yourdomain.com"
+                            "https://localhost:3000",
+                            "https://skincede-spss.vercel.app"
                         )
                         .AllowAnyHeader()
                         .AllowAnyMethod()
@@ -215,8 +213,8 @@ public static class ServiceExtensions
                 builder
                     .WithOrigins(
                         "http://localhost:3000",
-                        "https://localhost:3000"
-                        // Add production URLs here
+                        "https://localhost:3000",
+                        "https://skincede-spss.vercel.app"
                     )
                     .AllowAnyMethod()
                     .AllowAnyHeader()
