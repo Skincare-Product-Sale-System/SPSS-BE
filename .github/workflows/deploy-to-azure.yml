@@ -35,7 +35,14 @@ jobs:
       run: dotnet build --configuration ${{ env.CONFIGURATION }} --no-restore
     
     - name: Publish
-      run: dotnet publish "${{ env.WORKING_DIRECTORY }}" --configuration ${{ env.CONFIGURATION }} --no-build --output "${{ env.AZURE_WEBAPP_PACKAGE_PATH }}"
+      run: dotnet publish "${{ env.WORKING_DIRECTORY }}" --configuration ${{ env.CONFIGURATION }} --no-build --output "${{ env.AZURE_WEBAPP_PACKAGE_PATH }}" /p:DebugType=None /p:DebugSymbols=false
+    
+    - name: Remove unnecessary files
+      run: |
+        cd ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue *.pdb
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue *.xml
+      shell: pwsh
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
