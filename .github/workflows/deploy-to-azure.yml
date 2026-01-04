@@ -32,6 +32,12 @@ jobs:
       - name: Publish
         run: dotnet publish API/API.csproj -c Release -o ./publish
 
+      - name: Zip publish folder
+        run: |
+          cd ./publish
+          zip -r ../deploy.zip .
+          cd ..
+
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -41,7 +47,7 @@ jobs:
         uses: azure/webapps-deploy@v2
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          package: ./publish
+          package: ./deploy.zip
 
       - name: Logout
         run: az logout
