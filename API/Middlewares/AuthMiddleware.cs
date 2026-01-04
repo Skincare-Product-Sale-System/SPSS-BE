@@ -38,17 +38,24 @@ public class AuthMiddleware
                 var tokenHandler = new JwtSecurityTokenHandler();
                 try
                 {
-                    var jwtToken = tokenHandler.ReadJwtToken(token);
-
-                    // Validate token expiration
-                    if (jwtToken.ValidTo < DateTime.UtcNow)
+                    // SECURITY FIX: Validate token signature instead of just reading it
+                    var key = Encoding.UTF8.GetBytes(_configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured"));
+                    var validationParameters = new TokenValidationParameters
                     {
-                        context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
-                        await context.Response.WriteAsync("Token has expired");
-                        return;
-                    }
+                        ValidateIssuerSigningKey = true,
+                        IssuerSigningKey = new SymmetricSecurityKey(key),
+                        ValidateIssuer = true,
+                        ValidIssuer = _configuration["Jwt:Issuer"],
+                        ValidateAudience = true,
+                        ValidAudience = _configuration["Jwt:Audience"],
+                        ValidateLifetime = true,
+                        ClockSkew = TimeSpan.Zero
+                    };
 
-                    // Extract claims
+                    var principal = tokenHandler.ValidateToken(token, validationParameters, out SecurityToken validatedToken);
+                    var jwtToken = (JwtSecurityToken)validatedToken;
+
+                    // Extract claims from validated token
                     var claims = jwtToken.Claims.ToList();
 
                     // Extract and store individual claims in HttpContext.Items

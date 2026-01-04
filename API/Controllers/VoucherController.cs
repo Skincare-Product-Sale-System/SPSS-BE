@@ -92,6 +92,8 @@ public class VoucherController : ControllerBase
         }
     }
     
+    // SECURITY FIX: Added authorization - only Manager can delete vouchers
+    [CustomAuthorize("Manager")]
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

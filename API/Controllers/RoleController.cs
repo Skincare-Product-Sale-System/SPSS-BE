@@ -16,6 +16,8 @@ public class RoleController : ControllerBase
 
     public RoleController(IRoleService roleService) => _roleService = roleService ?? throw new ArgumentNullException(nameof(roleService));
 
+    // SECURITY FIX: Added authorization - only Manager can view roles
+    [CustomAuthorize("Manager")]
     [HttpGet("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -32,6 +34,8 @@ public class RoleController : ControllerBase
         }
     }
 
+    // SECURITY FIX: Added authorization - only Manager can list roles
+    [CustomAuthorize("Manager")]
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPaged([Range(1, int.MaxValue)] int pageNumber = 1, [Range(1, 100)] int pageSize = 10)

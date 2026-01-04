@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Repositories.Interface;
 using Services.Interface;
 using Services.Response;
+using Shared.Security;
 
 namespace Services.Implementation;
 
@@ -167,7 +168,8 @@ public class UserService : IUserService
             EmailAddress = userForCreationDto.EmailAddress,
             PhoneNumber = userForCreationDto.PhoneNumber,
             Status = userForCreationDto.Status,
-            Password = userForCreationDto.Password,
+            // SECURITY FIX: Hash password before storing
+            Password = PasswordHelper.HashPassword(userForCreationDto.Password),
             AvatarUrl = !string.IsNullOrWhiteSpace(userForCreationDto.AvatarUrl) ? userForCreationDto.AvatarUrl : null,
             CreatedBy = "System", 
             CreatedTime = DateTimeOffset.UtcNow,

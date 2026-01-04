@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Services.Dto.Api;
 using Services.Interface;
+using API.Extensions;
 
 namespace API.Controllers;
 
@@ -53,7 +54,8 @@ public class AuthenticationController : ControllerBase
         }
     }
 
-    // [Authorize]
+    // SECURITY FIX: Enabled authorization for logout
+    [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest logoutRequest)
     {
@@ -81,6 +83,8 @@ public class AuthenticationController : ControllerBase
         }
     }
     
+    // SECURITY FIX: Added authorization - only existing Manager can create Manager accounts
+    [CustomAuthorize("Manager")]
     [HttpPost("registerForManager")]
     public async Task<ActionResult<string>> RegisterForManager(RegisterRequest registerRequest)
     {
@@ -134,6 +138,8 @@ public class AuthenticationController : ControllerBase
         }
     }
 
+    // SECURITY FIX: Added authorization - only Manager can create Staff accounts
+    [CustomAuthorize("Manager")]
     [HttpPost("registerForStaff")]
     public async Task<ActionResult<string>> RegisterForStaff(RegisterRequest registerRequest)
     {

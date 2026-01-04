@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Services.Dto.Api;
 using Services.Interface;
 using Services.Response;
+using API.Extensions;
 
 [ApiController]
 [Route("api/dashboards")]
@@ -20,6 +21,8 @@ public class DashboardController : ControllerBase
         
     }
 
+    // SECURITY FIX: Added authorization - only Manager can view revenue data
+    [CustomAuthorize("Manager")]
     [HttpGet("total-revenue")]
     public async Task<IActionResult> GetTotalRevenue(
         [Range(1, int.MaxValue)] int pageNumber = 1,
@@ -44,6 +47,8 @@ public class DashboardController : ControllerBase
     //     return Ok(trend);
     // }
 
+    // SECURITY FIX: Added authorization - only Manager can view top products
+    [CustomAuthorize("Manager")]
     [HttpGet("top-products")]
     public async Task<IActionResult> GetTopSellingProducts(int pageNumber = 1, int pageSize = 10, DateTime? startDate = null, DateTime? endDate = null)
     {
@@ -51,6 +56,8 @@ public class DashboardController : ControllerBase
         return Ok(products);
     }
     
+    // SECURITY FIX: Added authorization - only Manager can view best sellers analytics
+    [CustomAuthorize("Manager")]
     // Add this method to the ProductController
     [HttpGet("best-sellers")]
     public async Task<IActionResult> GetBestSellers(
@@ -67,6 +74,8 @@ public class DashboardController : ControllerBase
         return Ok(ApiResponse<PagedResponse<ProductDto>>.SuccessResponse(pagedData));
     }
     
+    // SECURITY FIX: Added authorization - only Manager can view pending orders
+    [CustomAuthorize("Manager")]
     [HttpGet("top-pending")]
     public async Task<IActionResult> GetTopPendingOrders([FromQuery] int topCount = 10)
     {

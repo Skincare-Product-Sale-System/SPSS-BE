@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Services.Dto.Api;
 using Services.Interface;
+using API.Extensions;
 
 namespace API.Controllers
 {
@@ -15,6 +16,8 @@ namespace API.Controllers
             _imageService = imageService;
         }
 
+        // SECURITY FIX: Added authorization - only Manager can upload images
+        [CustomAuthorize("Manager", "Staff")]
         [HttpPost]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -43,7 +46,8 @@ namespace API.Controllers
             }
         }
 
-
+        // SECURITY FIX: Added authorization - only Manager can delete images
+        [CustomAuthorize("Manager", "Staff")]
         [HttpDelete]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]

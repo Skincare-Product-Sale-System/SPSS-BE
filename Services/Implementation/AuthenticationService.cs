@@ -10,6 +10,8 @@ using Microsoft.VisualBasic;
 using Repositories.Interface;
 using Services.Interface;
 using Mapster;
+using Shared.Security;
+
 namespace Services.Implementation;
 
 public class AuthenticationService : IAuthenticationService
@@ -45,8 +47,20 @@ public class AuthenticationService : IAuthenticationService
         // Kiểm tra tính hợp lệ
         if (user == null || user.IsDeleted)
             throw new UnauthorizedAccessException("Invalid username/email or password");
-        if (user.Password != loginRequest.Password)
+        
+        // SECURITY FIX: Use password hashing instead of plain text comparison
+        if (!PasswordHelper.VerifyPassword(loginRequest.Password, user.Password))
             throw new UnauthorizedAccessException("Invalid username/email or password");
+        
+        // If password needs upgrade (was plain text), upgrade it
+        if (PasswordHelper.NeedsUpgrade(user.Password))
+        {
+            user.Password = PasswordHelper.HashPassword(loginRequest.Password);
+            user.LastUpdatedTime = DateTimeOffset.UtcNow;
+            user.LastUpdatedBy = "System-PasswordUpgrade";
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.SaveChangesAsync();
+        }
         // Map the user to AuthUserDto
         var authUserDto = new AuthUserDto
         {
@@ -106,14 +120,14 @@ public class AuthenticationService : IAuthenticationService
             throw new KeyNotFoundException("User not found.");
         }
 
-        // Validate current password
-        if (user.Password != currentPassword)
+        // SECURITY FIX: Validate current password using hashing
+        if (!PasswordHelper.VerifyPassword(currentPassword, user.Password))
         {
             throw new UnauthorizedAccessException("Current password is incorrect.");
         }
 
-        // Update the password
-        user.Password = newPassword;
+        // SECURITY FIX: Hash the new password before storing
+        user.Password = PasswordHelper.HashPassword(newPassword);
         user.LastUpdatedTime = DateTimeOffset.UtcNow;
         user.LastUpdatedBy = userId.ToString();
 

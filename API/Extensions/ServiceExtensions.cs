@@ -194,19 +194,33 @@ public static class ServiceExtensions
             options.AddPolicy("AllowFrontendApp",
                 policy =>
                 {
-                    policy.WithOrigins("http://localhost:3000")
+                    // SECURITY FIX: Only allow specific origins
+                    // Add your production domains here
+                    policy.WithOrigins(
+                            "http://localhost:3000",
+                            "https://localhost:3000"
+                            // Add production URLs here, e.g.:
+                            // "https://yourdomain.com",
+                            // "https://www.yourdomain.com"
+                        )
                         .AllowAnyHeader()
                         .AllowAnyMethod()
-                        .AllowCredentials();
+                        .AllowCredentials()
+                        .WithExposedHeaders("Content-Disposition", "Token-Expired");
                 });
             
-            options.AddPolicy("AllowAll", builder =>
+            // SECURITY FIX: SignalR policy with specific origins
+            options.AddPolicy("SignalRPolicy", builder =>
             {
                 builder
-                    .SetIsOriginAllowed(_ => true) // Cho phép tất cả nguồn gốc
+                    .WithOrigins(
+                        "http://localhost:3000",
+                        "https://localhost:3000"
+                        // Add production URLs here
+                    )
                     .AllowAnyMethod()
                     .AllowAnyHeader()
-                    .AllowCredentials(); // Quan trọng cho WebSocket/SignalR
+                    .AllowCredentials(); // Required for SignalR
             });
         });
         return services;

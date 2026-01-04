@@ -24,18 +24,8 @@ builder.Host.UseSerilog((context, services, configuration) =>
             retainedFileCountLimit: 31);
 });
 
-// In your Program.cs or Startup.cs
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", builder =>
-    {
-        builder
-            .AllowAnyOrigin()  // For development only - restrict this in production
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .WithExposedHeaders("Content-Disposition");
-    });
-});
+// SECURITY FIX: Remove insecure AllowAll CORS policy
+// Only configure CORS once via ConfigureCors extension method
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -64,7 +54,8 @@ var app = builder.Build();
 //    Console.WriteLine("Migrations applied successfully!");
 //}
 
-if (app.Environment.IsDevelopment() || true) // Luôn bật Swagger
+// SECURITY FIX: Only enable Swagger in Development environment
+if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI(c =>
@@ -75,10 +66,15 @@ if (app.Environment.IsDevelopment() || true) // Luôn bật Swagger
 }
 
 app.UseSerilogRequestLogging();
+
+// SECURITY FIX: Add security headers to all responses
+app.UseSecurityHeaders();
+
 app.UseHttpsRedirection();
 app.UseRouting();
+
+// SECURITY FIX: Use only one CORS policy
 app.UseCors("AllowFrontendApp");
-app.UseCors("AllowAll");
 app.UseMiddleware<API.Middlewares.RequestResponseMiddleware>();
 app.UseMiddleware<ErrorHandlingMiddleware>();
 app.UseMiddleware<AuthMiddleware>();

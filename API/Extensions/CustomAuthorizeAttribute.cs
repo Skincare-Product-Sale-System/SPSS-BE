@@ -13,7 +13,16 @@ namespace API.Extensions
         }
 
         public void OnAuthorization(AuthorizationFilterContext context)
-        {   
+        {
+            // SECURITY FIX: Check if user is authenticated first
+            var userId = context.HttpContext.Items["UserId"];
+            if (userId == null)
+            {
+                // User is not authenticated - return 401 Unauthorized
+                context.Result = new UnauthorizedResult();
+                return;
+            }
+
             var role = context.HttpContext.Items["Role"]?.ToString();
 
             // Handle multiple roles in "Role"

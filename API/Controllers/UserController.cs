@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Services.Dto.Api;
 using Services.Interface;
 using Services.Response;
+using API.Extensions;
 
 namespace API.Controllers;
 
@@ -31,9 +32,9 @@ public class UserController : ControllerBase
     //     return userId;
     // }
 
-    
+    // SECURITY FIX: Added authorization - only Manager can list all users
+    [CustomAuthorize("Manager")]
     [HttpGet]
-    // [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetPaged(
         [Range(1, int.MaxValue)] int pageNumber = 1,
         [Range(1, 100)] int pageSize = 10)
@@ -42,9 +43,9 @@ public class UserController : ControllerBase
         return Ok(ApiResponse<PagedResponse<UserDto>>.SuccessResponse(pagedUsers));
     }
 
-
+    // SECURITY FIX: Added authorization - only Manager can view user details
+    [CustomAuthorize("Manager")]
     [HttpGet("{id:guid}")]
-    // [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetById(Guid id)
     {
         try
@@ -81,7 +82,8 @@ public class UserController : ControllerBase
         }
     }
 
-
+    // SECURITY FIX: Added authorization - only Manager can update users
+    [CustomAuthorize("Manager")]
     [HttpPatch("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -110,9 +112,9 @@ public class UserController : ControllerBase
         }
     }
 
-  
+    // SECURITY FIX: Added authorization - only Manager can delete users
+    [CustomAuthorize("Manager")]
     [HttpDelete("{id:guid}")]
-    // [Authorize(Roles = "Admin")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id)
