@@ -199,7 +199,8 @@ public static class ServiceExtensions
                     policy.WithOrigins(
                             "http://localhost:3000",
                             "https://localhost:3000",
-                            "https://skincede-spss.vercel.app"
+                            "https://skincede-spss.vercel.app",
+                            "https://spssapi-hxfzbchrcafgd2hg.southeastasia-01.azurewebsites.net"
                         )
                         .AllowAnyHeader()
                         .AllowAnyMethod()
@@ -214,7 +215,8 @@ public static class ServiceExtensions
                     .WithOrigins(
                         "http://localhost:3000",
                         "https://localhost:3000",
-                        "https://skincede-spss.vercel.app"
+                        "https://skincede-spss.vercel.app",
+                        "https://spssapi-hxfzbchrcafgd2hg.southeastasia-01.azurewebsites.net"
                     )
                     .AllowAnyMethod()
                     .AllowAnyHeader()
