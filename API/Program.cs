@@ -30,6 +30,11 @@ builder.Host.UseSerilog((context, services, configuration) =>
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// Add Memory Cache for performance optimization
+builder.Services.AddMemoryCache();
+builder.Services.AddResponseCaching();
+
 builder.Services.ConfigureCors();
 builder.Services.ConfigureRepositories();
 builder.Services.ConfigureServices();
@@ -71,6 +76,10 @@ app.UseSecurityHeaders();
 
 app.UseHttpsRedirection();
 app.UseRouting();
+
+// Add Response Caching for improved performance
+app.UseResponseCaching();
+app.UseMiddleware<ResponseCachingMiddleware>();
 
 // SECURITY FIX: Use only one CORS policy
 app.UseCors("AllowFrontendApp");
