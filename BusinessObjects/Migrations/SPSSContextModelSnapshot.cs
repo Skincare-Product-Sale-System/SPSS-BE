@@ -269,6 +269,7 @@ namespace BusinessObjects.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("DeletedBy")
+                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
@@ -639,11 +640,6 @@ namespace BusinessObjects.Migrations
 
                     b.Property<int>("QuantityInStock")
                         .HasColumnType("int");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("rowversion");
 
                     b.HasKey("Id");
 
