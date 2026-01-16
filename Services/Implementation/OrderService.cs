@@ -9,6 +9,7 @@ using Repositories.Interface;
 using Services.Interface;
 using Services.Response;
 using Shared.Constants;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Services.Implementation
 {
@@ -249,215 +250,258 @@ namespace Services.Implementation
                 throw new ArgumentException($"User with ID {userId} not found or is inactive.");
             }
 
-            await _unitOfWork.BeginTransactionAsync();
-            try
+            // Optimistic Locking: Retry logic for handling concurrent order placement
+            const int maxRetries = 3;
+            int retryCount = 0;
+
+            while (retryCount < maxRetries)
             {
-                // Step 1: Validate Address
-                var addressExists = await _unitOfWork.Addresses.Entities
-                    .AnyAsync(a => a.Id == orderDto.AddressId);
-                if (!addressExists)
+                await _unitOfWork.BeginTransactionAsync();
+                try
                 {
-                    throw new ArgumentException($"Address with ID {orderDto.AddressId} not found.");
-                }
-
-                // Step 2: Validate Payment Method
-                var paymentMethodExists = await _unitOfWork.PaymentMethods.Entities
-                    .AnyAsync(pm => pm.Id == orderDto.PaymentMethodId);
-                if (!paymentMethodExists)
-                {
-                    throw new ArgumentException($"Payment method with ID {orderDto.PaymentMethodId} not found.");
-                }
-
-                // Step 3: Validate Voucher (if provided)
-                if (orderDto.VoucherId.HasValue)
-                {
-                    var voucherExists = await _unitOfWork.Vouchers.Entities
-                        .AnyAsync(v => v.Id == orderDto.VoucherId);
-                    if (!voucherExists)
+                    // Step 1: Validate Address
+                    var addressExists = await _unitOfWork.Addresses.Entities
+                        .AnyAsync(a => a.Id == orderDto.AddressId);
+                    if (!addressExists)
                     {
-                        throw new ArgumentException($"Voucher with ID {orderDto.VoucherId} not found.");
-                    }
-                }
-
-                // Step 4: Validate Product Items (ensure each ProductItem exists)
-                foreach (var orderDetail in orderDto.OrderDetail)
-                {
-                    var productItemExists = await _unitOfWork.ProductItems.Entities
-                        .AnyAsync(pi => pi.Id == orderDetail.ProductItemId);
-                    if (!productItemExists)
-                    {
-                        throw new ArgumentException($"Product item with ID {orderDetail.ProductItemId} not found.");
+                        throw new ArgumentException($"Address with ID {orderDto.AddressId} not found.");
                     }
 
-                    // Validate Order Detail Quantity
-                    if (orderDetail.Quantity <= 0)
+                    // Step 2: Validate Payment Method
+                    var paymentMethodExists = await _unitOfWork.PaymentMethods.Entities
+                        .AnyAsync(pm => pm.Id == orderDto.PaymentMethodId);
+                    if (!paymentMethodExists)
                     {
-                        throw new ArgumentException($"Quantity for ProductItem ID {orderDetail.ProductItemId} must be greater than zero.");
-                    }
-                }
-
-                // Step 4.1: Remove CartItems associated with the user's product items
-                var productItemIds = orderDto.OrderDetail.Select(od => od.ProductItemId).ToList();
-                var cartItemsToRemove = await _unitOfWork.CartItems.Entities
-                    .Where(ci => ci.UserId == userId && productItemIds.Contains(ci.ProductItemId))
-                    .ToListAsync();
-
-                if (cartItemsToRemove.Any())
-                {
-                    _unitOfWork.CartItems.RemoveRange(cartItemsToRemove);
-                }
-
-                // Step 5: Calculate Order Total and update stock
-                decimal orderTotal = 0;
-                var orderDetailsEntities = new List<OrderDetail>();
-                foreach (var orderDetail in orderDto.OrderDetail)
-                {
-                    // Find the ProductItem
-                    var productItem = await _unitOfWork.ProductItems.Entities
-                        .FirstOrDefaultAsync(pi => pi.Id == orderDetail.ProductItemId);
-
-                    if (productItem == null)
-                        throw new ArgumentException($"Product item with ID {orderDetail.ProductItemId} does not exist.");
-
-                    // Ensure sufficient stock
-                    if (productItem.QuantityInStock < orderDetail.Quantity)
-                    {
-                        throw new ArgumentException($"Not enough stock for ProductItem ID {orderDetail.ProductItemId}. Available stock: {productItem.QuantityInStock}");
+                        throw new ArgumentException($"Payment method with ID {orderDto.PaymentMethodId} not found.");
                     }
 
-                    // Update stock
-                    productItem.QuantityInStock -= orderDetail.Quantity;
-                    _unitOfWork.ProductItems.Update(productItem);
+                    // Step 3: Validate Voucher (if provided)
+                    if (orderDto.VoucherId.HasValue)
+                    {
+                        var voucherExists = await _unitOfWork.Vouchers.Entities
+                            .AnyAsync(v => v.Id == orderDto.VoucherId);
+                        if (!voucherExists)
+                        {
+                            throw new ArgumentException($"Voucher with ID {orderDto.VoucherId} not found.");
+                        }
+                    }
 
-                    // Calculate total
-                    decimal price = productItem.Price;
-                    orderTotal += price * orderDetail.Quantity;
+                    // Step 4: Validate Product Items (ensure each ProductItem exists)
+                    foreach (var orderDetail in orderDto.OrderDetail)
+                    {
+                        var productItemExists = await _unitOfWork.ProductItems.Entities
+                            .AnyAsync(pi => pi.Id == orderDetail.ProductItemId);
+                        if (!productItemExists)
+                        {
+                            throw new ArgumentException($"Product item with ID {orderDetail.ProductItemId} not found.");
+                        }
 
+                        // Validate Order Detail Quantity
+                        if (orderDetail.Quantity <= 0)
+                        {
+                            throw new ArgumentException($"Quantity for ProductItem ID {orderDetail.ProductItemId} must be greater than zero.");
+                        }
+                    }
+
+                    // Step 4.1: Remove CartItems associated with the user's product items
+                    var productItemIds = orderDto.OrderDetail.Select(od => od.ProductItemId).ToList();
+                    var cartItemsToRemove = await _unitOfWork.CartItems.Entities
+                        .Where(ci => ci.UserId == userId && productItemIds.Contains(ci.ProductItemId))
+                        .ToListAsync();
+
+                    if (cartItemsToRemove.Any())
+                    {
+                        _unitOfWork.CartItems.RemoveRange(cartItemsToRemove);
+                    }
+
+                    // Step 5: Calculate Order Total and update stock with Optimistic Locking
+                    // Load ProductItems with RowVersion tracking for concurrency control
+                    decimal orderTotal = 0;
+                    var orderDetailsEntities = new List<OrderDetail>();
+                    var productItemsToUpdate = new List<ProductItem>();
+
+                    foreach (var orderDetail in orderDto.OrderDetail)
+                    {
+                        // Find the ProductItem with RowVersion tracking (for optimistic locking)
+                        var productItem = await _unitOfWork.ProductItems.Entities
+                            .AsTracking() // Enable change tracking to detect concurrency conflicts
+                            .FirstOrDefaultAsync(pi => pi.Id == orderDetail.ProductItemId);
+
+                        if (productItem == null)
+                            throw new ArgumentException($"Product item with ID {orderDetail.ProductItemId} does not exist.");
+
+                        // Ensure sufficient stock (re-check on each retry)
+                        if (productItem.QuantityInStock < orderDetail.Quantity)
+                        {
+                            throw new ArgumentException($"Not enough stock for ProductItem ID {orderDetail.ProductItemId}. Available stock: {productItem.QuantityInStock}, Requested: {orderDetail.Quantity}");
+                        }
+
+                        // Update stock (RowVersion will be checked on SaveChanges)
+                        productItem.QuantityInStock -= orderDetail.Quantity;
+                        productItemsToUpdate.Add(productItem);
+
+                        // Calculate total
+                        decimal price = productItem.Price;
+                        orderTotal += price * orderDetail.Quantity;
+
+                        // Create OrderDetail entity
+                        var orderDetailEntity = new OrderDetail
+                        {
+                            Id = Guid.NewGuid(),
+                            ProductItemId = orderDetail.ProductItemId,
+                            Quantity = orderDetail.Quantity,
+                            Price = price,
+                        };
+                        orderDetailsEntities.Add(orderDetailEntity);
+                    }
+
+                    // Apply voucher discount if provided
                     if (orderDto.VoucherId != null)
                     {
-                        // Find the Voucher
                         var voucher = await _unitOfWork.Vouchers.Entities
+                            .AsTracking()
                             .FirstOrDefaultAsync(v => v.Id == orderDto.VoucherId);
+                        
+                        if (voucher == null)
+                            throw new ArgumentException($"Voucher with ID {orderDto.VoucherId} not found.");
+
                         // Apply discount based on voucher discount rate
                         decimal discountAmount = orderTotal * (decimal)(voucher.DiscountRate / 100);
                         orderTotal -= discountAmount;
 
                         // Decrement the usage limit
                         voucher.UsageLimit--;
-                        _unitOfWork.Vouchers.Update(voucher); // Cập nhật voucher trong cơ sở dữ liệu
+                        _unitOfWork.Vouchers.Update(voucher);
                     }
 
-                    // Create OrderDetail entity
-                    var orderDetailEntity = new OrderDetail
+                    // Validate Order Total
+                    if (orderTotal <= 0)
+                    {
+                        throw new ArgumentException("Order total must be greater than zero.");
+                    }
+
+                    // Step 6: Create Order entity
+                    var orderEntity = new Order
                     {
                         Id = Guid.NewGuid(),
-                        ProductItemId = orderDetail.ProductItemId,
-                        Quantity = orderDetail.Quantity,
-                        Price = price,
+                        AddressId = orderDto.AddressId,
+                        PaymentMethodId = orderDto.PaymentMethodId,
+                        VoucherId = orderDto.VoucherId,
+                        Status = StatusForOrder.Processing,
+                        OrderTotal = orderTotal,
+                        CreatedTime = DateTime.UtcNow,
+                        CreatedBy = userId.ToString(),
+                        LastUpdatedTime = DateTime.UtcNow,
+                        LastUpdatedBy = userId.ToString(),
+                        UserId = userId,
+                        IsDeleted = false
                     };
-                    orderDetailsEntities.Add(orderDetailEntity);
-                }
 
-                // Validate Order Total
-                if (orderTotal <= 0)
-                {
-                    throw new ArgumentException("Order total must be greater than zero.");
-                }
-
-                // Step 6: Create Order entity
-                var orderEntity = new Order
-                {
-                    Id = Guid.NewGuid(),
-                    AddressId = orderDto.AddressId,
-                    PaymentMethodId = orderDto.PaymentMethodId,
-                    VoucherId = orderDto.VoucherId,
-                    Status = StatusForOrder.Processing,
-                    OrderTotal = orderTotal,
-                    CreatedTime = DateTime.UtcNow,
-                    CreatedBy = userId.ToString(),
-                    LastUpdatedTime = DateTime.UtcNow,
-                    LastUpdatedBy = userId.ToString(),
-                    UserId = userId,
-                    IsDeleted = false
-                };
-
-                // Kiểm tra PaymentMethodId và điều chỉnh trạng thái cùng việc tạo StatusChange
-                if (orderEntity.PaymentMethodId == Guid.Parse("ABB33A09-6065-4DC2-A943-51A9DD9DF27E"))
-                {
-                    // Nếu là "ABB33A09-6065-4DC2-A943-51A9DD9DF27E", trạng thái là Pending và tạo StatusChange
-                    orderEntity.Status = StatusForOrder.Processing;
-
-                    // Add Order entity to UnitOfWork
-                    _unitOfWork.Orders.Add(orderEntity);
-
-                    // Associate OrderDetails with Order and add them to UnitOfWork
-                    foreach (var orderDetailEntity in orderDetailsEntities)
+                    // Kiểm tra PaymentMethodId và điều chỉnh trạng thái cùng việc tạo StatusChange
+                    if (orderEntity.PaymentMethodId == Guid.Parse("ABB33A09-6065-4DC2-A943-51A9DD9DF27E"))
                     {
-                        orderDetailEntity.OrderId = orderEntity.Id;
-                        _unitOfWork.OrderDetails.Add(orderDetailEntity);
+                        // Nếu là "ABB33A09-6065-4DC2-A943-51A9DD9DF27E", trạng thái là Pending và tạo StatusChange
+                        orderEntity.Status = StatusForOrder.Processing;
+
+                        // Add Order entity to UnitOfWork
+                        _unitOfWork.Orders.Add(orderEntity);
+
+                        // Associate OrderDetails with Order and add them to UnitOfWork
+                        foreach (var orderDetailEntity in orderDetailsEntities)
+                        {
+                            orderDetailEntity.OrderId = orderEntity.Id;
+                            _unitOfWork.OrderDetails.Add(orderDetailEntity);
+                        }
+
+                        // Create StatusChange entity
+                        var statusChangeEntity = new StatusChange
+                        {
+                            Id = Guid.NewGuid(),
+                            OrderId = orderEntity.Id,
+                            Status = orderEntity.Status,
+                            Date = DateTimeOffset.UtcNow,
+                        };
+
+                        // Add StatusChange entity to UnitOfWork
+                        _unitOfWork.StatusChanges.Add(statusChangeEntity);
+                    }
+                    else if (orderEntity.PaymentMethodId == Guid.Parse("354EDA95-5BE5-41BE-ACC3-CFD70188118A") || orderEntity.PaymentMethodId == Guid.Parse("B0B58CE6-34D1-4500-BF1C-4BCC35A2EFD8"))
+                    {
+                        // Nếu là "354EDA95-5BE5-41BE-ACC3-CFD70188118A", trạng thái là Awaiting Payment và không tạo StatusChange
+                        orderEntity.Status = StatusForOrder.AwaitingPayment;
+
+                        // Add Order entity to UnitOfWork
+                        _unitOfWork.Orders.Add(orderEntity);
+
+                        // Associate OrderDetails with Order and add them to UnitOfWork
+                        foreach (var orderDetailEntity in orderDetailsEntities)
+                        {
+                            orderDetailEntity.OrderId = orderEntity.Id;
+                            _unitOfWork.OrderDetails.Add(orderDetailEntity);
+                        }
+                        var statusChangeEntity = new StatusChange
+                        {
+                            Id = Guid.NewGuid(),
+                            OrderId = orderEntity.Id,
+                            Status = orderEntity.Status,
+                            Date = DateTimeOffset.UtcNow,
+                        };
+                        // Add StatusChange entity to UnitOfWork
+                        _unitOfWork.StatusChanges.Add(statusChangeEntity);
                     }
 
-                    // Create StatusChange entity
-                    var statusChangeEntity = new StatusChange
+                    // Step 8: Save changes with Optimistic Locking
+                    // EF Core will automatically check RowVersion and throw DbUpdateConcurrencyException if conflict
+                    await _unitOfWork.SaveChangesAsync();
+
+                    // Step 9: Commit transaction
+                    await _unitOfWork.CommitTransactionAsync();
+
+                    // Step 10: Map Order entity to OrderDto
+                    var orderDtoResult = new OrderDto
                     {
-                        Id = Guid.NewGuid(),
-                        OrderId = orderEntity.Id,
+                        Id = orderEntity.Id,
                         Status = orderEntity.Status,
-                        Date = DateTimeOffset.UtcNow,
+                        OrderTotal = orderEntity.OrderTotal,
+                        CreatedTime = orderEntity.CreatedTime,
+                        PaymentMethodId = orderEntity.PaymentMethodId,
                     };
 
-                    // Add StatusChange entity to UnitOfWork
-                    _unitOfWork.StatusChanges.Add(statusChangeEntity);
+                    return orderDtoResult;
                 }
-                else if (orderEntity.PaymentMethodId == Guid.Parse("354EDA95-5BE5-41BE-ACC3-CFD70188118A") || orderEntity.PaymentMethodId == Guid.Parse("B0B58CE6-34D1-4500-BF1C-4BCC35A2EFD8"))
+                catch (DbUpdateConcurrencyException ex)
                 {
-                    // Nếu là "354EDA95-5BE5-41BE-ACC3-CFD70188118A", trạng thái là Awaiting Payment và không tạo StatusChange
-                    orderEntity.Status = StatusForOrder.AwaitingPayment;
+                    // Optimistic Locking conflict detected - rollback and retry
+                    await _unitOfWork.RollbackTransactionAsync();
+                    retryCount++;
 
-                    // Add Order entity to UnitOfWork
-                    _unitOfWork.Orders.Add(orderEntity);
-
-                    // Associate OrderDetails with Order and add them to UnitOfWork
-                    foreach (var orderDetailEntity in orderDetailsEntities)
+                    if (retryCount >= maxRetries)
                     {
-                        orderDetailEntity.OrderId = orderEntity.Id;
-                        _unitOfWork.OrderDetails.Add(orderDetailEntity);
+                        // After max retries, provide detailed error message
+                        var conflictItems = orderDto.OrderDetail
+                            .Select(od => $"ProductItem ID: {od.ProductItemId}, Quantity: {od.Quantity}")
+                            .ToList();
+                        
+                        throw new InvalidOperationException(
+                            $"Unable to complete order due to concurrent modifications. " +
+                            $"The product stock may have been updated by another customer. " +
+                            $"Please refresh and try again. " +
+                            $"Conflicted items: {string.Join(", ", conflictItems)}", ex);
                     }
-                    var statusChangeEntity = new StatusChange
-                    {
-                        Id = Guid.NewGuid(),
-                        OrderId = orderEntity.Id,
-                        Status = orderEntity.Status,
-                        Date = DateTimeOffset.UtcNow,
-                    };
-                    // Add StatusChange entity to UnitOfWork
-                    _unitOfWork.StatusChanges.Add(statusChangeEntity);
+
+                    // Wait a short random time before retry to reduce collision probability
+                    await Task.Delay(new Random().Next(50, 200));
+                    continue; // Retry the operation
                 }
-
-                // Step 8: Save changes
-                await _unitOfWork.SaveChangesAsync();
-
-                // Step 9: Commit transaction
-                await _unitOfWork.CommitTransactionAsync();
-
-                // Step 10: Map Order entity to OrderDto
-                var orderDtoResult = new OrderDto
+                catch (Exception)
                 {
-                    Id = orderEntity.Id,
-                    Status = orderEntity.Status,
-                    OrderTotal = orderEntity.OrderTotal,
-                    CreatedTime = orderEntity.CreatedTime,
-                    PaymentMethodId = orderEntity.PaymentMethodId,
-                };
-
-                return orderDtoResult;
-
+                    await _unitOfWork.RollbackTransactionAsync();
+                    throw;
+                }
             }
-            catch (Exception)
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                throw;
-            }
+
+            // This should never be reached, but compiler requires it
+            throw new InvalidOperationException("Failed to create order after maximum retries.");
         }
 
         public async Task<bool> UpdateOrderStatusAsync(Guid id, string newStatus, Guid userId, Guid? cancelReasonId = null)

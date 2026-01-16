@@ -1,0 +1,48 @@
+# Separate pipeline for running database migrations
+# This can be run manually or triggered before deployment
+
+trigger: none  # Manual trigger only
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  solution: '**/SPSS.sln'
+  project: '**/API.csproj'
+
+steps:
+  - checkout: self
+
+  - task: NuGetToolInstaller@1
+    displayName: 'Install NuGet'
+
+  - task: NuGetCommand@2
+    displayName: 'Restore NuGet Packages'
+    inputs:
+      command: 'restore'
+      restoreSolution: '$(solution)'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Install EF Core Tools'
+    inputs:
+      command: 'custom'
+      custom: 'tool'
+      arguments: 'install --global dotnet-ef'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Run Database Migration'
+    inputs:
+      command: 'custom'
+      custom: 'ef'
+      arguments: 'database update --project BusinessObjects --startup-project API --context SPSSContext --connection "$(SPSS_CONNECTION_STRING)"'
+    env:
+      ConnectionStrings__SPSS: '$(SPSS_CONNECTION_STRING)'
+    continueOnError: false
+
+  - task: PowerShell@2
+    displayName: 'Verify Migration'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Write-Host "Migration completed successfully!" -ForegroundColor Green
+        Write-Host "Please verify the migration in Azure SQL Database" -ForegroundColor Yellow

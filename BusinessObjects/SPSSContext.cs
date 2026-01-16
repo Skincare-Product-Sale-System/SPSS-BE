@@ -315,6 +315,14 @@ public partial class SPSSContext : DbContext
             .WithMany()
             .HasForeignKey(t => t.UserId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Configure ProductItem for Optimistic Locking
+        modelBuilder.Entity<ProductItem>(entity =>
+        {
+            entity.Property(e => e.RowVersion)
+                .IsRowVersion()
+                .IsConcurrencyToken();
+        });
     }
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);

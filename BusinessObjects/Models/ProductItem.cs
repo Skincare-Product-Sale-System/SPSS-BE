@@ -2,6 +2,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BusinessObjects.Models;
 
@@ -26,4 +27,8 @@ public partial class ProductItem
     public virtual ICollection<ProductConfiguration> ProductConfigurations { get; set; } = new List<ProductConfiguration>();
 
     public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
+
+    // Optimistic locking: RowVersion for concurrency control
+    [Timestamp]
+    public byte[] RowVersion { get; set; }
 }

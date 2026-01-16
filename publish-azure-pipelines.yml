@@ -11,6 +11,11 @@ trigger:
 pool:
   vmImage: 'windows-latest'
 
+variables:
+  solution: '**/SPSS.sln'
+  project: '**/API.csproj'
+  buildConfiguration: 'Release'
+
 steps:
 
   - task: DownloadBuildArtifacts@1
@@ -23,6 +28,37 @@ steps:
       downloadType: 'specific'
       artifactName: 'SPSSartifact'
       downloadPath: '$(Build.ArtifactsDirectory)'
+
+  # Step: Checkout source code for migration (if needed)
+  - checkout: self
+    displayName: 'Checkout source code for migration'
+  
+  # Step: Install EF Core tools
+  - task: DotNetCoreCLI@2
+    displayName: 'Install EF Core Tools'
+    inputs:
+      command: 'custom'
+      custom: 'tool'
+      arguments: 'install --global dotnet-ef'
+  
+  # Step: Restore NuGet packages
+  - task: DotNetCoreCLI@2
+    displayName: 'Restore NuGet Packages'
+    inputs:
+      command: 'restore'
+      restoreSolution: '$(solution)'
+  
+  # Step: Run Database Migrations before deployment
+  - task: DotNetCoreCLI@2
+    displayName: 'Run Database Migrations'
+    inputs:
+      command: 'custom'
+      custom: 'ef'
+      arguments: 'database update --project BusinessObjects --startup-project API --context SPSSContext --connection "$(SPSS_CONNECTION_STRING)"'
+      workingDirectory: '$(System.DefaultWorkingDirectory)'
+    env:
+      ConnectionStrings__SPSS: '$(SPSS_CONNECTION_STRING)'
+    continueOnError: false
   
   - task: AzureWebApp@1
     name: 'pushtoAzure'
